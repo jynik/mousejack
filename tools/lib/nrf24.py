@@ -55,6 +55,20 @@ RF_RATE_250K = 0
 RF_RATE_1M   = 1
 RF_RATE_2M   = 2
 
+# SPI Flash Commands
+SPI_FLASH_WREN          = 0x06
+SPI_FLASH_WRDIS         = 0x04
+SPI_FLASH_RDSR          = 0x05
+SPI_FLASH_WRSR          = 0x01
+SPI_FLASH_READ          = 0x03
+SPI_FLASH_PROGRAM       = 0x02
+SPI_FLASH_ERASE_PAGE    = 0x52
+SPI_FLASH_ERASE_ALL     = 0x62
+SPI_FLASH_RDFPCR        = 0x89
+SPI_FLASH_RDISIP        = 0x84
+SPI_FLASH_RDISMB        = 0x85
+SPI_FLASH_ENDEBUG       = 0x86
+
 # nRF24LU1+ radio dongle
 class nrf24:
 
@@ -144,6 +158,26 @@ class nrf24:
     self.send_usb_command(ENABLE_LNA_PA, [])
     self.dongle.read(0x81, 64, timeout=nrf24.usb_timeout)
 
+  # SPI flash read
+  def spi_flash_read(self, address, count):
+    if address < 0 or address > 65535:
+      raise ValueError('Invalid address: ' + hex(addr))
+    elif count < 1 or count >= 32:
+      raise ValueError('Invalid count: ' + str(count))
+
+    len_bytes = [(address >> 8) & 0xff, address & 0xff]
+    dummy = [ 0 ] * count
+    mosi = [ SPI_FLASH_READ ] + len_bytes + dummy
+
+    miso = self.spi_transaction(mosi)
+    return miso[3:]
+
+  # Read SPI flash status register
+  def spi_flash_rdsr(self):
+    mosi = [ SPI_FLASH_RDSR,  0 ]
+    miso = self.spi_transaction(mosi)
+    return miso[1:]
+
   # Perform an SPI transfer
   def spi_transaction(self, mosi_data, assert_csn=True, deassert_csn=True):
     if len(mosi_data) >= 32:
@@ -157,7 +191,10 @@ class nrf24:
     if deassert_csn:
         control |= 0x40
 
-    data = [control] + map(ord, mosi_data)
+    if type(mosi_data) == 'string':
+        mosi_data = map(ord, mosi_data)
+
+    data = [control] + mosi_data
 
     self.send_usb_command(SPI_TRANSACTION, data);
     return self.dongle.read(0x81, 64, timeout=nrf24.usb_timeout)
